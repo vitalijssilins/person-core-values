@@ -312,6 +312,14 @@
   generateValuesList(coreValuesWithCategories);
 
   function submitSelections() {
+    const apiKeyInput = document.getElementById('api-key-input');
+    const apiKey = apiKeyInput.value.trim();
+
+    if (!apiKey) {
+      alert('Please enter your OpenAI API Key before submitting.');
+      return; // Exit the function if the API key is not present
+    }
+
     const submitBtn = document.getElementById('submit-btn');
     const toggleBtn = document.getElementById('toggle-list-btn');
 
