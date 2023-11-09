@@ -1,0 +1,650 @@
+<!doctype html>
+<html class="no-js" lang="">
+
+<head>
+  <meta charset="utf-8">
+  <title>Find your core values</title>
+  <meta name="description" content="Select and visualize your core values with semantic clustering.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="theme-color" content="#fafafa">
+
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.1.2/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    #values-list {
+      height: calc(100vh - 15rem); /* Assuming the header and button take up approximately 4rem together */
+    }
+    #summary ul, #summary ol {
+      padding-left: 15px;
+    }
+
+    #summary ul li, #summary ol li {
+      padding: 7px 0;
+      list-style-type: disc;
+    }
+
+    #summary p {
+      padding: 10px 0;
+    }
+
+    #summary h1, #summary h2, #summary h3 {
+      padding-top: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+<div class="container mx-auto px-4 max-w-7xl">
+  <header class="my-10">
+    <h1 class="text-4xl text-center font-bold">Core Values Explorer</h1>
+    <p class="text-md my-4">Discover and align your core values with your personal and professional life goals using our AI-powered semantic clustering tool. Simply select values that resonate with you, and our system will provide a visual representation of how these values interconnect and support your overarching vision. It's a step toward intentional living and strategic life planning.</p>
+    <small class="text-sm">Values and categorization from <a href="https://www.scienceofpeople.com/core-values/" class="underline" target="_blank">Logan Hailey publication "Core Values List"</a>.</small>
+  </header>
+  <div class="flex justify-between items-center mb-4">
+    <div>
+      <button id="toggle-list-btn" class="hidden bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded inline-flex items-center">
+        <i id="toggle-icon" class="fas fa-chevron-up"></i>
+        <span class="ml-2 sr-only">Toggle List</span>
+      </button>
+    </div>
+    <div id="api-key-container" class="flex items-center">
+      <label for="api-key-input" class="mr-2 text-sm font-medium text-gray-900">Enter your OpenAI API Key:</label>
+      <input id="api-key-input" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5" placeholder="Enter API Key" required>
+      <button id="api-key-submit" onclick="saveApiKey()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2">
+        Save
+      </button>
+    </div>
+  </div>
+  <div id="values-list" class="h-screen overflow-y-auto bg-white shadow-md rounded-lg p-4 mb-4">
+    <button id="clear-all-btn" onclick="clearAllSelections()"
+            class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+      Clear All
+    </button>
+    <!-- Categories and checkboxes will be generated here -->
+  </div>
+  <div id="loading"
+       class="hidden fixed top-0 right-0 bottom-0 left-0 z-50 flex items-center justify-center bg-gray-300 bg-opacity-50">
+    <div class="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+  </div>
+  <div class="text-center mb-4">
+    <button id="submit-btn" onclick="submitSelections()"
+            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+      Submit
+    </button>
+  </div>
+  <div id="results-container" class="flex flex-wrap -mx-2 hidden">
+    <div class="w-full lg:w-2/3 px-2 mb-4">
+      <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+        <h2 class="text-2xl font-bold text-gray-800 p-5 border-b border-gray-200">How related are your values and beliefs</h2>
+        <p class="p-5">We have highlighted 5 values and beliefs that have the closest relations based on the similarity analysis by AI.</p>
+        <p class="px-5">You can drag nodes around to better see relations.</p>
+        <div id="graph" class="h-screen p-5"></div> <!-- Adjusted to take up the full minimum height -->
+      </div>
+    </div>
+    <div class="w-full lg:w-1/3 px-2 mb-4">
+      <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+        <h2 class="text-2xl font-bold text-gray-800 p-5 border-b border-gray-200">Connection to your personal vision</h2>
+        <div id="summary" class="p-5 text-gray-600 h-full overflow-y-auto"></div>
+        <!-- Allow for scrolling if text overflows -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let topNodesGlobal = [];
+
+  // Function to save the API key to local storage
+  function saveApiKey() {
+    const apiKeyInput = document.getElementById('api-key-input');
+    const apiKey = apiKeyInput.value;
+    openaiApiKey = apiKey;
+    localStorage.setItem('openaiApiKey', apiKey);
+  }
+
+  // Function to populate the API key from local storage if it exists
+  function populateApiKey() {
+    const storedApiKey = localStorage.getItem('openaiApiKey');
+    if (storedApiKey) {
+      const apiKeyInput = document.getElementById('api-key-input');
+      apiKeyInput.value = storedApiKey;
+    }
+    openaiApiKey = storedApiKey;
+  }
+
+  // Function to save checkbox states to local storage
+  function saveCheckboxState() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name="values"]');
+    const checkboxStates = Array.from(checkboxes).map(checkbox => {
+      return { id: checkbox.value, checked: checkbox.checked };
+    });
+    localStorage.setItem('checkboxStates', JSON.stringify(checkboxStates));
+  }
+
+  // Function to clear all selections and local storage
+  function clearAllSelections() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name="values"]');
+    checkboxes.forEach(checkbox => {
+      checkbox.checked = false;
+    });
+    localStorage.removeItem('checkboxStates');
+    updateCounters(coreValuesWithCategories); // Update counters after clearing
+  }
+
+  // Call populateApiKey on page load
+  window.onload = function() {
+    populateApiKey();
+    const checkboxStates = JSON.parse(localStorage.getItem('checkboxStates'));
+    if (checkboxStates) {
+      checkboxStates.forEach(state => {
+        const checkbox = document.querySelector(`input[type="checkbox"][name="values"][value="${state.id}"]`);
+        if (checkbox) {
+          checkbox.checked = state.checked;
+        }
+      });
+    }
+    updateCounters(coreValuesWithCategories); // Update the counters based on restored states
+  };
+
+  let openaiApiKey = '';  // Replace with your actual API key
+
+  // Structured list of core values with categories
+  const coreValuesWithCategories = {
+    "Basic List of Beliefs and Values": [
+      "Honesty", "Integrity", "Wisdom", "Autonomy", "Loyalty", "Abundance",
+      "Kindness", "Charity", "Respect", "Courage", "Generosity", "Gratitude",
+      "Openness", "Accountability", "Compassion", "Success", "Self-love",
+      "Spirituality", "Justice", "Forgiveness", "Caring", "Faith", "Beauty",
+      "Wealth", "Acceptance", "Humor", "Intuition", "Prosperity", "Change",
+      "Gracefulness", "Peacefulness", "Harmony", "Balance", "Joy/Fun",
+      "Independence", "Efficiency", "Promise-keeping", "Fairness", "Sincerity",
+      "Accuracy", "Goodness", "Hope", "Honor", "Humility", "Insightfulness",
+      "Influence", "Decisiveness", "Knowledge", "Lawfulness", "Calmness",
+      "Bliss", "Clarity", "Cleanliness", "Boldness", "Optimism", "Bravery",
+      "Friendliness", "Selflessness"
+    ],
+    "Personal Values in Relationships": [
+      "Trust", "Affection", "Listening", "Thoughtfulness", "Deep Connections",
+      "Patience", "Reciprocity", "Appreciation", "Fidelity", "Faithfulness",
+      "Clear Communication", "Playfulness", "Romance", "Passion", "Confidence",
+      "Quality Time", "Dedication", "Reliability", "Empathy", "Stability",
+      "Tolerance", "Emotional Intelligence", "Gentleness", "Warmth", "Cooperation",
+      "Sweetness", "Intimacy", "Gift-Giving", "Showing Appreciation", "Mutual Support",
+      "Equal Relationship", "Traditional Gender Roles"
+    ],
+    "Personal Values in Work": [
+      "Timeliness", "Persistence", "Dedication to Excellence", "Growth Mindset",
+      "Diversity", "Teamwork", "Work-Life Balance", "Innovation", "Ingenuity",
+      "Work Smarter, Not Harder", "Professionalism", "Fame", "Power",
+      "Hard Work Ethic", "Leadership", "Entrepreneurship", "Self-Development",
+      "Dynamic Responses", "Tidiness", "Organization", "Quality", "Responsibility",
+      "Credibility", "Encouragement", "Adaptability", "Self-Motivation",
+      "Service to Others", "Profit", "Constructive Criticism", "Management",
+      "Consistency", "Enthusiasm", "Achievement", "Transparency", "Dependability",
+      "Fast Pace", "Trial and Error", "Positive Impact", "Resourcefulness",
+      "Coaching", "Mentorship", "Problem-Solving", "Charisma", "Learning From Mistakes"
+    ],
+    "Personal Values for Life": [
+      "Self-Discipline", "Family First", "Friendship", "Positive Attitude",
+      "Freedom", "Creativity", "Happiness", "This Too Shall Pass", "Adventure",
+      "Balance", "Wellness", "Health and Fitness", "Personal Development",
+      "Spontaneity", "Extraordinary Experiences", "Travel", "Exhilaration",
+      "Exploration", "Financial Security", "Saving Money", "Self-Control",
+      "Restraint", "Consciousness", "Conformity", "Non-Conformity", "Modesty",
+      "Liveliness", "Vivaciousness", "Curiosity", "Understanding", "Anti-Racism",
+      "Social Justice", "Environmental Protection", "Animal Rights", "Reliability",
+      "Protecting Others", "Self-Preservation", "Chasing Your Dreams", "Awareness",
+      "Calmness", "Community", "Artistry", "Experimentation", "Imagination",
+      "Originality", "Cleverness", "Stewardship", "Wit", "Comedy", "Change the World",
+      "Inspire Others", "Personal Expression", "Finesse", "Open-Mindedness",
+      "Natural Living", "Religion", "Tradition", "Strength", "Entertainment",
+      "Pride in Your Work", "Trust Your Gut", "Harmony", "Implementation",
+      "Free Time", "Leisure", "Socializing", "Laughter", "Peace of Mind",
+      "Alone Time", "Going with the Flow", "Planning", "Inner Truth", "Righteousness",
+      "Non-Violence", "Tolerance", "Patience", "Altruism", "Sustainability"
+    ]
+    // ... more categories and values if needed ...
+  };
+
+  // Function to toggle the visibility of the values list
+  function toggleValuesList() {
+    const listDiv = document.getElementById('values-list');
+    const toggleIcon = document.getElementById('toggle-icon');
+    if (listDiv.classList.contains('hidden')) {
+      listDiv.classList.remove('hidden');
+      toggleIcon.classList.remove('fa-chevron-down');
+      toggleIcon.classList.add('fa-chevron-up');
+    } else {
+      listDiv.classList.add('hidden');
+      toggleIcon.classList.remove('fa-chevron-up');
+      toggleIcon.classList.add('fa-chevron-down');
+    }
+  }
+
+  // Attach the toggle function to the button
+  document.getElementById('toggle-list-btn').addEventListener('click', toggleValuesList);
+
+  // Function to generate checkboxes for the core values
+  function generateValuesList(valuesWithCategories) {
+    const listDiv = document.getElementById('values-list');
+    let totalValuesCount = 0;
+
+    // Create a total counter element
+    const totalCounterDiv = document.createElement('div');
+    totalCounterDiv.id = 'total-counter';
+    totalCounterDiv.classList.add('text-right', 'mb-4');
+    totalCounterDiv.innerHTML = `
+    Selected Values: <span id="total-selected">0</span>/<span id="total-values">0</span>
+  `;
+    listDiv.appendChild(totalCounterDiv);
+
+    for (const [category, values] of Object.entries(valuesWithCategories)) {
+      const categoryDiv = document.createElement('div');
+      categoryDiv.classList.add('category', 'mb-4', 'p-2', 'bg-gray-200', 'rounded-md', 'relative');
+
+      const categoryTitle = document.createElement('h3');
+      categoryTitle.textContent = category;
+      categoryTitle.classList.add('font-semibold', 'text-lg', 'mb-2');
+      categoryDiv.appendChild(categoryTitle);
+
+      // Add counter div for this category
+      const counterDiv = document.createElement('div');
+      counterDiv.classList.add('absolute', 'right-2', 'top-2');
+      const counterSpan = document.createElement('span');
+      counterSpan.classList.add('counter');
+      counterSpan.id = `counter-${category.replace(/\s+/g, '-')}`; // Replace spaces with dashes for a valid id
+      counterSpan.textContent = `0/${values.length}`;
+      counterDiv.appendChild(counterSpan);
+      categoryDiv.appendChild(counterDiv);
+
+      totalValuesCount += values.length;
+
+      const valuesDiv = document.createElement('div');
+      valuesDiv.classList.add('grid', 'grid-cols-2', 'sm:grid-cols-3', 'lg:grid-cols-4', 'gap-2');
+
+      values.forEach((value, index) => {
+        const label = document.createElement('label');
+        label.classList.add('flex', 'items-center', 'space-x-2');
+        const input = document.createElement('input');
+        input.setAttribute('type', 'checkbox');
+        input.setAttribute('name', 'values');
+        input.setAttribute('value', value);
+        input.classList.add('form-checkbox', 'h-5', 'w-5', 'text-blue-600');
+        input.setAttribute('data-category', category.replace(/\s+/g, '-'));
+        input.addEventListener('change', () => updateCounters(valuesWithCategories)); // Event listener to update counters
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = value;
+
+        label.appendChild(input);
+        label.appendChild(textSpan);
+
+        valuesDiv.appendChild(label);
+      });
+
+      categoryDiv.appendChild(valuesDiv);
+      listDiv.appendChild(categoryDiv);
+    }
+
+    // Set the total values count
+    document.getElementById('total-values').textContent = totalValuesCount.toString();
+  }
+
+  // Function to update the counters when a checkbox is clicked
+  function updateCounters(valuesWithCategories) {
+    const allCheckboxes = document.querySelectorAll('input[type="checkbox"][name="values"]');
+    const totalSelected = Array.from(allCheckboxes).filter(cb => cb.checked).length;
+    document.getElementById('total-selected').textContent = totalSelected.toString();
+
+    // Update count for each category
+    for (const category in valuesWithCategories) {
+      const sanitizedCategory = category.replace(/\s+/g, '-');
+      const categoryCheckboxes = document.querySelectorAll(`input[data-category="${sanitizedCategory}"]`);
+      const categorySelected = Array.from(categoryCheckboxes).filter(cb => cb.checked).length;
+      document.getElementById(`counter-${sanitizedCategory}`).textContent = `${categorySelected}/${categoryCheckboxes.length}`;
+    }
+  }
+
+  // Call the function to generate the list with counters
+  generateValuesList(coreValuesWithCategories);
+
+  function submitSelections() {
+    const submitBtn = document.getElementById('submit-btn');
+    const toggleBtn = document.getElementById('toggle-list-btn');
+
+    // Hide the submit button and show the toggle button
+    submitBtn.classList.add('hidden');
+    toggleBtn.classList.remove('hidden');
+    toggleValuesList();
+
+    // Show loading spinner
+    const loadingSpinner = document.getElementById('loading');
+    loadingSpinner.classList.remove('hidden');
+
+    // Unhide the results container
+    const resultsContainer = document.getElementById('results-container');
+    resultsContainer.classList.remove('hidden');
+
+    const selectedValues = Array.from(document.querySelectorAll('input[name="values"]:checked')).map(el => el.value);
+    performClustering(selectedValues).finally(() => {
+      // Hide loading spinner when clustering is done
+      loadingSpinner.classList.add('hidden');
+    });
+  }
+
+  // Function to handle checkbox changes
+  function onCheckboxChange() {
+    const submitBtn = document.getElementById('submit-btn');
+    const anyChecked = Array.from(document.querySelectorAll('input[name="values"]')).some(el => el.checked);
+
+    // Show the submit button if any checkbox is checked
+    if (anyChecked) {
+      submitBtn.classList.remove('hidden');
+    }
+    saveCheckboxState(); // Save the checkbox states to local storage
+  }
+
+  // Attach the checkbox change event listener
+  document.querySelectorAll('input[name="values"]').forEach(checkbox => {
+    checkbox.addEventListener('change', onCheckboxChange);
+  });
+
+  // Function to perform clustering of the selected values
+  async function performClustering(values) {
+    // In a real application, you would calculate the similarity matrix here
+    // For the sake of this example, we'll use a mock similarity matrix
+    const embeddings = await getEmbeddings(values);
+
+    // Calculate the similarity matrix from embeddings
+    const similarityMatrix = calculateSimilarityMatrix(embeddings);
+
+    const graphElement = document.getElementById('graph');
+    graphElement.innerHTML = ''; // Clear the graph element
+
+    // Render the force-directed graph using the similarity matrix
+    renderForceDirectedGraph(values, similarityMatrix);
+
+    const summaryElement = document.getElementById('summary');
+    summaryElement.innerHTML = ''; // Clear the summary element
+
+    await summarizeValues(values).catch(error => {
+      console.error("Error in summarization:", error);
+      // Handle errors, e.g., show an error message to the user
+    });
+  }
+
+  // Function to calculate similarity matrix based on embeddings
+  function calculateSimilarityMatrix(embeddings) {
+    let similarityMatrix = [];
+    for (let i = 0; i < embeddings.length; i++) {
+      similarityMatrix[i] = [];
+      for (let j = 0; j < embeddings.length; j++) {
+        if (i === j) {
+          similarityMatrix[i][j] = 1; // similarity with itself is 1
+        } else {
+          // Calculate the dot product as a measure of similarity
+          let sum = 0;
+          for (let k = 0; k < embeddings[i].length; k++) {
+            sum += embeddings[i][k] * embeddings[j][k];
+          }
+          similarityMatrix[i][j] = sum; // Assuming embeddings are normalized
+        }
+      }
+    }
+    return similarityMatrix;
+  }
+
+  // This function sends the values to the GPT-4 API to generate a summarization
+  async function summarizeValues(values) {
+  // Include top nodes in the prompt
+    const topNodesPrompt = topNodesGlobal.length > 0 ? `The top values and beliefs with the highest degree of interconnection are: ${topNodesGlobal.join(', ')}. ` : '';
+
+    // Construct the message for the summarization, guiding the AI to consider personal vision
+    const message = {
+      model: "gpt-4-1106-preview", // or "gpt-4.0-turbo" if available
+      stream: true,
+      messages: [
+        {
+          role: "system", //
+          content: "You are an insightful assistant who provides advice on personal development and creating a personal vision. Be concise. Format answer with HTML tags, use list, paragraph, line breaks, headings, italic, quotes and other html tags where necessary."
+        },
+        {
+          role: "user", // I've identified the following values and beliefs as important to me: ${values.join(', ')}.
+          content: `${topNodesPrompt} Answer with the text on how these values can guide my personal vision and development.`
+        }
+      ]
+    };
+
+    // Replace YOUR_OPENAI_API_KEY with your actual OpenAI API key
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(message)
+    });
+
+    const summaryElement = document.getElementById('summary');
+    // ReadableStream is not fully supported in all browsers; this is a basic example.
+    if (response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      let accumulatedHTML = "";
+      reader.read().then(function processText({done, value}) {
+        if (done) return;
+        const chunk = decoder.decode(value, {stream: true});
+
+        // Split the chunk by newlines, as each event may be sent as a separate line
+        const events = chunk.trim().split(/\r?\n/);
+
+        // Process each event line
+        events.forEach((line) => {
+          if (line.startsWith('data: ')) {
+            // Extract the JSON part of the line
+            const jsonStr = line.replace('data: ', '');
+            try {
+              // Parse the JSON string
+              const eventData = JSON.parse(jsonStr);
+              // Extract the content from the event data
+              const content = eventData.choices[0].delta.content;
+
+              // Append the content to the accumulated HTML
+              accumulatedHTML += content;
+
+              // convert tags to html
+              // if current text ends with any tag closure formatted as html entity, we convert the last closed tag to html
+              const tags = ['</p>', '</ul>','</li>','</h1>','</h2>','</h3>', '</h4>', '</h5>', '</h6>', '</b>', '</i>', '</u>', '<br>', '<br/>', '</blockquote>', '</ol>'];
+              // Check if the accumulated HTML ends with any of the closing tags
+              const lastTagIndex = tags.findIndex(tag => accumulatedHTML.trim().endsWith(tag));
+
+              if (lastTagIndex !== -1) {
+                summaryElement.innerHTML = accumulatedHTML;
+              }
+            } catch (e) {
+              console.error('Error parsing event stream data:', e);
+            }
+          }
+        });
+
+        return reader.read().then(processText);
+      });
+    } else {
+      // Fallback if ReadableStream is not available
+      const data = await response.json();
+      return data.choices[0].message.content.trim(); // Return the summarization text
+    }
+  }
+
+  // Function to get embeddings from OpenAI
+  async function getEmbeddings(values) {
+    const response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        input: values,
+        model: "text-embedding-ada-002"
+      })
+    });
+    const data = await response.json();
+    return data.data.map(d => d.embedding);
+  }
+
+  // Function to render the force-directed graph using D3.js
+  function renderForceDirectedGraph(values, similarityMatrix) {
+    const threshold = 0.823; // 82.3% similarity
+
+    const graphContainer = document.getElementById('graph');
+    const width = graphContainer.clientWidth;
+    const height = graphContainer.clientHeight;
+
+    // Prepare the data for D3
+    const nodes = values.map((value, index) => ({
+      id: value,
+      group: 1 // or any other categorization logic
+    }));
+
+    // Compute links based on the similarity matrix, filter out weak links if necessary
+    const links = [];
+    for (let i = 0; i < similarityMatrix.length; i++) {
+      for (let j = i + 1; j < similarityMatrix[i].length; j++) {
+        if (similarityMatrix[i][j] > threshold) { // Using the defined threshold
+          links.push({
+            source: values[i],
+            target: values[j],
+            value: similarityMatrix[i][j]
+          });
+        }
+      }
+    }
+
+    // Calculate the degree for each node
+    let degree = {};
+    links.forEach(link => {
+      degree[link.source] = (degree[link.source] || 0) + 1;
+      degree[link.target] = (degree[link.target] || 0) + 1;
+    });
+
+    // Find the top 5 nodes with the highest degree
+    topNodesGlobal = Object.keys(degree).sort((a, b) => degree[b] - degree[a]).slice(0, 5);
+
+
+    // Create an SVG with a viewBox and preserveAspectRatio attributes for responsiveness
+    const svg = d3.select('#graph').append('svg')
+            .attr('width', '100%') // Set the SVG width to 100% of the container
+            .attr('height', '100%') // Set the SVG height to 100% of the container
+            .attr('viewBox', `0 0 ${width} ${height}`) // Use viewBox to set the internal dimensions
+            .attr('preserveAspectRatio', 'xMidYMid meet'); // Preserve the aspect ratio when scaling
+
+
+    // Define the color scale
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    // Define the force simulation
+    const simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id).distance(120)) // Increase link distance
+      .force('charge', d3.forceManyBody().strength(-600)) // Increase charge strength for more repulsion
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(d => 20)); // Add collision with a radius
+
+
+    // Count the number of links for each node
+    nodes.forEach(node => {
+      node.linkCount = links.reduce((count, link) => {
+        // Compare the id instead of the whole node object
+        return count + ((link.source.id === node.id || link.target.id === node.id) ? 1 : 0);
+      }, 0);
+    });
+
+    window.addEventListener('resize', () => {
+      const newWidth = graphContainer.clientWidth;
+      const newHeight = graphContainer.clientHeight;
+
+      // Update the viewBox with new dimensions
+      svg.attr('viewBox', `0 0 ${newWidth} ${newHeight}`);
+
+      // Update the force simulation center
+      simulation.force('center', d3.forceCenter(newWidth / 2, newHeight / 2));
+      simulation.alpha(1).restart(); // Restart the simulation with the new settings
+    });
+
+    // Draw lines for the links
+    const link = svg.append('g')
+      .selectAll('line')
+      .data(links)
+      .enter().append('line')
+      .attr('stroke-width', d => Math.sqrt(d.value * 10)) // Scale the stroke width
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.6);
+
+    // Draw circles for the nodes
+    const node = svg.append('g')
+      .selectAll('circle')
+      .data(nodes)
+      .enter().append('circle')
+      .attr('r', d => topNodesGlobal.includes(d.id) ? 10 : 5)
+      .attr('fill', d => topNodesGlobal.includes(d.id) ? 'red' : color(d.group)) // Highlight top nodes in red
+      .call(d3.drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended));
+
+    // Add titles for node hover tooltips
+    node.append('title')
+      .text(d => `${d.id} (${d.linkCount})`);
+
+    // Add labels to the nodes
+    const label = svg.append('g')
+      .selectAll('text')
+      .data(nodes)
+      .enter().append('text')
+      .attr('dx', 12)
+      .attr('dy', '.35em')
+      .text(d => `${d.id} (${d.linkCount})`)
+      .style('font-weight', d => topNodesGlobal.includes(d.id) ? 'bold' : 'normal');
+
+    // Define the drag behavior
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+
+    // Update the graph positions on each tick
+    simulation.on('tick', () => {
+      link
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y);
+
+      node
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y);
+
+      label
+        .attr('x', d => d.x)
+        .attr('y', d => d.y);
+    });
+  }
+</script>
+</body>
+</html>
