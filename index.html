@@ -13,9 +13,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="jLouvain.js"></script>
   <style>
     #values-list {
-      height: calc(100vh - 15rem); /* Assuming the header and button take up approximately 4rem together */
+      height: calc(100vh - 30rem); /* Assuming the header and button take up approximately 4rem together */
     }
     #summary ul, #summary ol {
       padding-left: 15px;
@@ -41,7 +42,6 @@
   <header class="my-10">
     <h1 class="text-4xl text-center font-bold">Core Values Explorer</h1>
     <p class="text-md my-4">Discover and align your core values with your personal and professional life goals using our AI-powered semantic clustering tool. Simply select values that resonate with you, and our system will provide a visual representation of how these values interconnect and support your overarching vision. It's a step toward intentional living and strategic life planning.</p>
-    <small class="text-sm">Values and categorization from <a href="https://www.scienceofpeople.com/core-values/" class="underline" target="_blank">Logan Hailey publication "Core Values List"</a>.</small>
   </header>
   <div class="flex justify-between items-center mb-4">
     <div>
@@ -76,16 +76,16 @@
     </button>
   </div>
   <div id="results-container" class="flex flex-wrap -mx-2 hidden">
-    <div class="w-full lg:w-2/3 px-2 mb-4">
+    <div class="w-2/3 px-2 mb-4">
       <div class="bg-white shadow-lg rounded-lg overflow-hidden">
-        <h2 class="text-2xl font-bold text-gray-800 p-5 border-b border-gray-200">How related are your values and beliefs</h2>
+        <h2 class="text-2xl font-bold text-gray-800 p-5 border-b border-gray-200">Let's find most interconnected values and beliefs</h2>
         <p class="p-5">We have highlighted 5 values and beliefs that have the closest relations based on the similarity analysis by AI. You can drag nodes around.</p>
         <div id="graph" class="h-screen p-5"></div> <!-- Adjusted to take up the full minimum height -->
       </div>
     </div>
-    <div class="w-full lg:w-1/3 px-2 mb-4">
+    <div class="w-1/3 px-2 mb-4">
       <div class="bg-white shadow-lg rounded-lg overflow-hidden">
-        <h2 class="text-2xl font-bold text-gray-800 p-5 border-b border-gray-200">Connection to your personal vision</h2>
+        <h2 class="text-2xl font-bold text-gray-800 p-5 border-b border-gray-200">2. Let's connect top values and beliefs to your personal vision</h2>
         <div id="summary" class="p-5 text-gray-600 h-full overflow-y-auto"></div>
         <!-- Allow for scrolling if text overflows -->
       </div>
@@ -152,19 +152,70 @@
 
   // Structured list of core values with categories
   const coreValuesWithCategories = {
-    "Basic List of Beliefs and Values": [
-      "Honesty", "Integrity", "Wisdom", "Autonomy", "Loyalty", "Abundance",
-      "Kindness", "Charity", "Respect", "Courage", "Generosity", "Gratitude",
-      "Openness", "Accountability", "Compassion", "Success", "Self-love",
-      "Spirituality", "Justice", "Forgiveness", "Caring", "Faith", "Beauty",
-      "Wealth", "Acceptance", "Humor", "Intuition", "Prosperity", "Change",
-      "Gracefulness", "Peacefulness", "Harmony", "Balance", "Joy/Fun",
-      "Independence", "Efficiency", "Promise-keeping", "Fairness", "Sincerity",
-      "Accuracy", "Goodness", "Hope", "Honor", "Humility", "Insightfulness",
-      "Influence", "Decisiveness", "Knowledge", "Lawfulness", "Calmness",
-      "Bliss", "Clarity", "Cleanliness", "Boldness", "Optimism", "Bravery",
-      "Friendliness", "Selflessness"
-    ],
+    "List of Beliefs and Values": [
+      "Certainty",
+      "Control",
+      "Security",
+      "Peace",
+      "Health",
+      "Discipline",
+      "Job security",
+      "Wealth",
+      "Financial stability",
+      "Pleasure",
+      "Tradition",
+      "Trust",
+      "Privacy",
+      "Accountability",
+      "Challenge",
+      "Adventure",
+      "Variety",
+      "Excitement",
+      "Courage",
+      "Curiosity",
+      "Creativity",
+      "Reputation",
+      "Respect",
+      "Authority",
+      "Fame",
+      "Authenticity",
+      "Beauty",
+      "Appreciation",
+      "Acceptance",
+      "Influence",
+      "Popularity",
+      "Uniqueness",
+      "Love",
+      "Family",
+      "Honesty",
+      "Loyalty",
+      "Forgiveness",
+      "Compassion",
+      "Friendship",
+      "Growth",
+      "Passion",
+      "Excellence",
+      "Determination",
+      "Success",
+      "Independence",
+      "Religion",
+      "Wisdom",
+      "Intelligence",
+      "Competence",
+      "Spirituality",
+      "Inner harmony",
+      "Ambition",
+      "Contribution",
+      "Equality",
+      "Justice",
+      "Meaningful work",
+      "Teamwork",
+      "Tolerance",
+      "Commitment",
+      "Ethics",
+      "Helpfulness",
+      "Freedom"
+    ]/*,
     "Personal Values in Relationships": [
       "Trust", "Affection", "Listening", "Thoughtfulness", "Deep Connections",
       "Patience", "Reciprocity", "Appreciation", "Fidelity", "Faithfulness",
@@ -204,7 +255,7 @@
       "Free Time", "Leisure", "Socializing", "Laughter", "Peace of Mind",
       "Alone Time", "Going with the Flow", "Planning", "Inner Truth", "Righteousness",
       "Non-Violence", "Tolerance", "Patience", "Altruism", "Sustainability"
-    ]
+    ]*/
     // ... more categories and values if needed ...
   };
 
@@ -385,6 +436,11 @@
 
   // Function to calculate similarity matrix based on embeddings
   function calculateSimilarityMatrix(embeddings) {
+    if (!embeddings || !Array.isArray(embeddings) || embeddings.length === 0) {
+      console.error('Invalid embeddings array:', embeddings);
+      return [];
+    }
+
     let similarityMatrix = [];
     for (let i = 0; i < embeddings.length; i++) {
       similarityMatrix[i] = [];
@@ -506,17 +562,23 @@
 
   // Function to render the force-directed graph using D3.js
   function renderForceDirectedGraph(values, similarityMatrix) {
-    const threshold = 0.823; // 82.3% similarity
+    // Calculate the dynamic threshold based on similarity scores
+    let flatSimilarityScores = [];
+    for (let i = 0; i < similarityMatrix.length; i++) {
+      for (let j = i + 1; j < similarityMatrix[i].length; j++) {
+        flatSimilarityScores.push(similarityMatrix[i][j]);
+      }
+    }
+
+    // Use a statistical measure to set the threshold, e.g., the 75th percentile
+    flatSimilarityScores.sort();
+    const thresholdIndex = Math.floor(flatSimilarityScores.length * 0.943);
+    const threshold = flatSimilarityScores[thresholdIndex];
+    console.log('Threshold calculated: ' + threshold);
 
     const graphContainer = document.getElementById('graph');
     const width = graphContainer.clientWidth;
     const height = graphContainer.clientHeight;
-
-    // Prepare the data for D3
-    const nodes = values.map((value, index) => ({
-      id: value,
-      group: 1 // or any other categorization logic
-    }));
 
     // Compute links based on the similarity matrix, filter out weak links if necessary
     const links = [];
@@ -539,27 +601,60 @@
       degree[link.target] = (degree[link.target] || 0) + 1;
     });
 
+    // Filter out nodes that have 0 links
+    const filteredNodes = values.filter(value => degree[value] > 0);
+
+    const edgeList = convertToEdgeList(similarityMatrix, values, threshold);
+    const communityAssignment = runCommunityDetection(edgeList);
+
+    // Verify that each value has a corresponding community ID
+    values.forEach(value => {
+      if (communityAssignment[value] === undefined) {
+        console.error(`No community ID found for value: ${value}`);
+      }
+    });
+
+    console.log('Community assignment:', communityAssignment);
+
+    // Prepare the data for D3
+    const nodes = filteredNodes.map((value, index) => ({
+      id: value,
+      group: communityAssignment[value] !== undefined ? communityAssignment[value] : 11,
+    }));
+
     // Find the top 5 nodes with the highest degree
     topNodesGlobal = Object.keys(degree).sort((a, b) => degree[b] - degree[a]).slice(0, 5);
-
 
     // Create an SVG with a viewBox and preserveAspectRatio attributes for responsiveness
     const svg = d3.select('#graph').append('svg')
             .attr('width', '100%') // Set the SVG width to 100% of the container
             .attr('height', '100%') // Set the SVG height to 100% of the container
             .attr('viewBox', `0 0 ${width} ${height}`) // Use viewBox to set the internal dimensions
-            .attr('preserveAspectRatio', 'xMidYMid meet'); // Preserve the aspect ratio when scaling
+            .attr('preserveAspectRatio', 'xMidYMid meet') // Preserve the aspect ratio when scaling
+            .call(d3.zoom().on("zoom", (event) => {
+              container.attr("transform", event.transform);
+            }))
+            .append('g');
 
+    // Append a rectangle as the zoomable area
+    svg.append("rect")
+            .attr("width", width)
+            .attr("height", height)
+            .style("fill", "none")
+            .style("pointer-events", "all");
+
+    const container = svg.append('g')
+            .attr('class', 'everything');
 
     // Define the color scale
-    const color = d3.scaleOrdinal(d3.schemeCategory10);
+    const color = d3.scaleOrdinal(d3.schemePaired);
 
     // Define the force simulation
     const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id(d => d.id).distance(120)) // Increase link distance
-      .force('charge', d3.forceManyBody().strength(-600)) // Increase charge strength for more repulsion
+      .force('link', d3.forceLink(links).id(d => d.id).distance(10)) // Increase link distance
+      .force('charge', d3.forceManyBody().strength(-400)) // Increase charge strength for more repulsion
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => 20)); // Add collision with a radius
+      .force('collision', d3.forceCollide().radius(d => 15)); // Add collision with a radius
 
 
     // Count the number of links for each node
@@ -583,7 +678,8 @@
     });
 
     // Draw lines for the links
-    const link = svg.append('g')
+    const link = container.append('g')
+      .attr('class', 'links')
       .selectAll('line')
       .data(links)
       .enter().append('line')
@@ -592,12 +688,13 @@
       .attr('stroke-opacity', 0.6);
 
     // Draw circles for the nodes
-    const node = svg.append('g')
+    const node = container.append('g')
+      .attr('class', 'nodes')
       .selectAll('circle')
       .data(nodes)
       .enter().append('circle')
       .attr('r', d => topNodesGlobal.includes(d.id) ? 10 : 5)
-      .attr('fill', d => topNodesGlobal.includes(d.id) ? 'red' : color(d.group)) // Highlight top nodes in red
+      .attr('fill', d => color(d.group)) // Highlight top nodes in red
       .call(d3.drag()
         .on('start', dragstarted)
         .on('drag', dragged)
@@ -608,11 +705,12 @@
       .text(d => `${d.id} (${d.linkCount})`);
 
     // Add labels to the nodes
-    const label = svg.append('g')
+    const label = container.append('g')
+      .attr('class', 'labels')
       .selectAll('text')
       .data(nodes)
       .enter().append('text')
-      .attr('dx', 12)
+      .attr('dx', d => topNodesGlobal.includes(d.id) ? 12 : 10)
       .attr('dy', '.35em')
       .text(d => `${d.id} (${d.linkCount})`)
       .style('font-weight', d => topNodesGlobal.includes(d.id) ? 'bold' : 'normal');
@@ -651,6 +749,38 @@
         .attr('x', d => d.x)
         .attr('y', d => d.y);
     });
+  }
+
+  function convertToEdgeList(similarityMatrix, values, threshold) {
+    let edgeList = [];
+
+    for (let i = 0; i < similarityMatrix.length; i++) {
+      if (!similarityMatrix[i]) {
+        console.error(`Row ${i} in similarityMatrix is undefined`);
+        continue;
+      }
+
+      for (let j = i + 1; j < similarityMatrix[i].length; j++) {
+        if (similarityMatrix[i][j] > threshold) {
+          edgeList.push({
+            source: values[i],
+            target: values[j],
+            weight: similarityMatrix[i][j]
+          });
+        }
+      }
+    }
+
+    return edgeList;
+  }
+
+  function runCommunityDetection(edgeList) {
+    var community = jLouvain()
+            .nodes(edgeList.map(d => d.source))
+            .edges(edgeList);
+
+    // Log the community assignment to ensure it's correct
+    return community();
   }
 </script>
 </body>
